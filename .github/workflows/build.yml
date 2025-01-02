@@ -1,0 +1,110 @@
+name: Build Universal Java Runtime (aarch64	, x64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        required: true
+        type: choice
+        description: JDK Release
+        options:
+          - jdk-21.0.5+11
+          - jdk-23.0.1+11
+      arch:
+        required: true
+        type: string
+        description: JDK Architectures
+        default: '["aarch64","x64"]'
+
+jobs:
+  download:
+    name: Download JDK Release
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: ${{ fromJSON(inputs.arch) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Restore Cache
+        id: restore-cache
+        uses: actions/cache/restore@v4
+        with:
+          key: |
+            ${{ inputs.release }}-${{ matrix.arch }}
+          path: |
+            ./${{ matrix.arch }}
+      - name: Download JDK
+        if: steps.restore-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -Ls "https://api.adoptium.net/v3/binary/version/${{ inputs.release }}/mac/${{ matrix.arch }}/jdk/hotspot/normal/eclipse" -o "./${{ inputs.release }}-${{ matrix.arch }}"
+      - name: Extract JDK
+        if: steps.restore-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir ./${{ matrix.arch }}
+          tar -zvx -C ./${{ matrix.arch }} -f "./${{ inputs.release }}-${{ matrix.arch }}"
+      - name: Save Cache
+        uses: actions/cache/save@v4
+        with:
+          key: ${{ inputs.release }}-${{ matrix.arch }}
+          path: |
+            ./${{ matrix.arch }}
+
+  lipo:
+    name: Create Universal Binary
+    runs-on: macos-latest
+    needs: download
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Restore Cache
+        uses: actions/cache/restore@v4
+        with:
+          key: |
+            ${{ inputs.release }}-${{ fromJSON(inputs.arch)[0] }}
+          path: |
+            ./${{ fromJSON(inputs.arch)[0] }}
+      - name: Restore Cache
+        uses: actions/cache/restore@v4
+        with:
+          key: |
+            ${{ inputs.release }}-${{ fromJSON(inputs.arch)[1] }}
+          path: |
+            ./${{ fromJSON(inputs.arch)[1] }}
+      - name: Run script
+        run: |
+          UNIVERSAL_JDK=$(pwd)/${{ inputs.release }}-universal
+          ARM64_JDK=$(pwd)/${{ fromJSON(inputs.arch)[0] }}/${{ inputs.release }}
+          X86_64_JDK=$(pwd)/${{ fromJSON(inputs.arch)[1] }}/${{ inputs.release }}
+          
+          ${ARM64_JDK}/Contents/Home/bin/jlink --add-modules ALL-MODULE-PATH --strip-debug --no-man-pages --no-header-files --compress=2 --output ${ARM64_JDK}/Contents/jre
+          rm -rf ${ARM64_JDK}/Contents/Home
+          mv ${ARM64_JDK}/Contents/jre ${ARM64_JDK}/Contents/Home
+          
+          ${X86_64_JDK}/Contents/Home/bin/jlink --add-modules ALL-MODULE-PATH --strip-debug --no-man-pages --no-header-files --compress=2 --output ${X86_64_JDK}/Contents/jre
+          rm -rf ${X86_64_JDK}/Contents/Home
+          mv ${X86_64_JDK}/Contents/jre ${X86_64_JDK}/Contents/Home
+          
+          # We ditto both in case there is something present in one but not both.
+          ditto -vV ${ARM64_JDK} ${UNIVERSAL_JDK}
+          ditto -vV ${X86_64_JDK} ${UNIVERSAL_JDK}
+          
+          for subdir in MacOS Home/bin Home/lib ; do
+            pushd ${UNIVERSAL_JDK}/Contents/${subdir}
+            find . -type f | while read file ; do
+              FILE_TYPE=$(file "${file}")
+              [[ ${FILE_TYPE} =~ "Mach-O" ]] || continue
+              if [[ -f "${ARM64_JDK}/Contents/${subdir}/${file}" && -f "${X86_64_JDK}/Contents/${subdir}/${file}" ]] ; then
+                  lipo -output ${file} -create ${ARM64_JDK}/Contents/${subdir}/${file} ${X86_64_JDK}/Contents/${subdir}/${file}
+              fi
+            done
+            popd
+          done
+          
+          sed -i '' 's:x86_64:x86_64+arm64:' ${UNIVERSAL_JDK}/Contents/Home/release
+          ditto -c -k --keepParent --sequesterRsrc ${UNIVERSAL_JDK} ${UNIVERSAL_JDK}.zip
+      - name: Archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.release }}
+          path: ${{ inputs.release }}-universal.zip
