@@ -51,6 +51,10 @@ jobs:
             ./${{ matrix.arch }}
 
   lipo:
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
     name: Create Universal Binary
     runs-on: macos-latest
     needs: download
@@ -107,4 +111,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.release }}
-          path: ${{ inputs.release }}-universal.zip
+          path: '${{ inputs.release }}-universal.zip'
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: '${{ inputs.release }}-universal.zip'
