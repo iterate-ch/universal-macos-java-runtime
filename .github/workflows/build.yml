@@ -8,8 +8,8 @@ on:
         type: choice
         description: JDK Release
         options:
-          - jdk-21.0.5+11
-          - jdk-23.0.1+11
+          - jdk-21.0.6+7
+          - jdk-23.0.2+7
       arch:
         required: true
         type: string
