@@ -8,6 +8,7 @@ on:
         type: choice
         description: JDK Release
         options:
+          - jdk-21.0.8+9
           - jdk-21.0.7+6
           - jdk-22.0.2+9
           - jdk-23.0.2+7
