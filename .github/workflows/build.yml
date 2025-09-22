@@ -13,6 +13,7 @@ on:
           - jdk-22.0.2+9
           - jdk-23.0.2+7
           - jdk-24.0.1+9
+          - jdk-25.0.0+36
       arch:
         required: true
         type: string
