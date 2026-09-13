@@ -43,7 +43,7 @@ jobs:
       - name: Download JDK
         if: steps.restore-cache.outputs.cache-hit != 'true'
         run: |
-          curl -Ls "https://api.adoptium.net/v3/binary/version/${{ inputs.release }}/mac/${{ matrix.arch }}/jdk/hotspot/normal/eclipse" -o "./${{ inputs.release }}-${{ matrix.arch }}"
+          curl -fLs "https://api.adoptium.net/v3/binary/version/${{ inputs.release }}/mac/${{ matrix.arch }}/jdk/hotspot/normal/eclipse" -o "./${{ inputs.release }}-${{ matrix.arch }}"
       - name: Extract JDK
         if: steps.restore-cache.outputs.cache-hit != 'true'
         run: |
