@@ -49,6 +49,17 @@ jobs:
         run: |
           mkdir ./${{ matrix.arch }}
           tar -zvx -C ./${{ matrix.arch }} -f "./${{ inputs.release }}-${{ matrix.arch }}"
+      - name: Download JMODs
+        if: steps.restore-cache.outputs.cache-hit != 'true'
+        run: |
+          # Since JDK 24 the Temurin JDK no longer includes the jmods folder (JEP 493) which is required for jlink
+          # with --add-modules ALL-MODULE-PATH. JMODs are published as a separate archive instead.
+          if [[ -d "./${{ matrix.arch }}/${{ inputs.release }}/Contents/Home/jmods" ]] ; then
+            exit 0
+          fi
+          curl -fLs "https://api.adoptium.net/v3/binary/version/${{ inputs.release }}/mac/${{ matrix.arch }}/jmods/hotspot/normal/eclipse" -o "./${{ inputs.release }}-${{ matrix.arch }}-jmods"
+          mkdir ./${{ matrix.arch }}/jmods
+          tar -zx --strip-components=1 -C ./${{ matrix.arch }}/jmods -f "./${{ inputs.release }}-${{ matrix.arch }}-jmods"
       - name: Save Cache
         uses: actions/cache/save@v4
         with:
@@ -87,11 +98,17 @@ jobs:
           ARM64_JDK=$(pwd)/${{ fromJSON(inputs.arch)[0] }}/${{ inputs.release }}
           X86_64_JDK=$(pwd)/${{ fromJSON(inputs.arch)[1] }}/${{ inputs.release }}
           
-          ${ARM64_JDK}/Contents/Home/bin/jlink --add-modules ALL-MODULE-PATH --strip-debug --no-man-pages --no-header-files --compress=2 --output ${ARM64_JDK}/Contents/jre
+          # Use jmods bundled with the JDK (before JDK 24) or downloaded separately (JDK 24 and later)
+          ARM64_JMODS=${ARM64_JDK}/Contents/Home/jmods
+          [[ -d ${ARM64_JMODS} ]] || ARM64_JMODS=$(dirname ${ARM64_JDK})/jmods
+          X86_64_JMODS=${X86_64_JDK}/Contents/Home/jmods
+          [[ -d ${X86_64_JMODS} ]] || X86_64_JMODS=$(dirname ${X86_64_JDK})/jmods
+
+          ${ARM64_JDK}/Contents/Home/bin/jlink --module-path ${ARM64_JMODS} --add-modules ALL-MODULE-PATH --strip-debug --no-man-pages --no-header-files --compress=2 --output ${ARM64_JDK}/Contents/jre
           rm -rf ${ARM64_JDK}/Contents/Home
           mv ${ARM64_JDK}/Contents/jre ${ARM64_JDK}/Contents/Home
-          
-          ${X86_64_JDK}/Contents/Home/bin/jlink --add-modules ALL-MODULE-PATH --strip-debug --no-man-pages --no-header-files --compress=2 --output ${X86_64_JDK}/Contents/jre
+
+          ${X86_64_JDK}/Contents/Home/bin/jlink --module-path ${X86_64_JMODS} --add-modules ALL-MODULE-PATH --strip-debug --no-man-pages --no-header-files --compress=2 --output ${X86_64_JDK}/Contents/jre
           rm -rf ${X86_64_JDK}/Contents/Home
           mv ${X86_64_JDK}/Contents/jre ${X86_64_JDK}/Contents/Home
           
