@@ -23,6 +23,11 @@ on:
         type: string
         description: JDK Architectures
         default: '["aarch64","x64"]'
+      deploy:
+        required: true
+        type: boolean
+        description: Deploy to Maven repository
+        default: true
 
 jobs:
   download:
@@ -141,3 +146,46 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: '${{ inputs.release }}-universal.zip'
+
+  deploy:
+    name: Deploy to Maven Repository
+    if: inputs.deploy
+    runs-on: ubuntu-latest
+    needs: lipo
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Download universal runtime
+        # The artifact is extracted on download, yielding <release>-universal.zip
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.release }}
+      - name: Configure Maven settings
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml <<EOF
+          <settings>
+            <servers>
+              <server>
+                <id>maven.cyberduck.io-release</id>
+                <username>\${env.MAVEN_S3_ACCESS_KEY}</username>
+                <password>\${env.MAVEN_S3_SECRET_KEY}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+      - name: Deploy
+        env:
+          MAVEN_S3_ACCESS_KEY: ${{ secrets.MAVEN_S3_ACCESS_KEY }}
+          MAVEN_S3_SECRET_KEY: ${{ secrets.MAVEN_S3_SECRET_KEY }}
+        run: |
+          # jdk-25.0.5+8 -> 25.0.5
+          VERSION=$(echo "${{ inputs.release }}" | sed -E 's/^jdk-//; s/\+.*$//')
+          mvn --batch-mode deploy:deploy-file \
+            -DgroupId=net.temurin \
+            -DartifactId=jdk \
+            -Dversion=${VERSION} \
+            -Dpackaging=zip \
+            -DrepositoryId=maven.cyberduck.io-release \
+            -Durl=s3://repo.maven.cyberduck.io/releases/ \
+            -Dfile=${{ inputs.release }}-universal.zip
