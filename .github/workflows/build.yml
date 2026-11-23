@@ -144,7 +144,7 @@ jobs:
           name: ${{ inputs.release }}
           path: '${{ inputs.release }}-universal.zip'
       - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: '${{ inputs.release }}-universal.zip'
 
