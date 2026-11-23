@@ -39,7 +39,7 @@ jobs:
         arch: ${{ fromJSON(inputs.arch) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Restore Cache
         id: restore-cache
         uses: actions/cache/restore@v6
@@ -85,7 +85,7 @@ jobs:
     needs: download
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Restore Cache
         uses: actions/cache/restore@v6
         with:
@@ -155,7 +155,7 @@ jobs:
     needs: lipo
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Download universal runtime
         # The artifact is extracted on download, yielding <release>-universal.zip
         uses: actions/download-artifact@v8
